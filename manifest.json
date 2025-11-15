@@ -1,0 +1,44 @@
+{
+  "manifest_version": 3,
+  "name": "Reorder Chrome Windows",
+  "version": "1.0",
+  "description": "Cycle focus or move tabs through Chrome windows in a custom order.",
+  "permissions": ["windows", "storage", "tabs"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Choose window order",
+    "default_popup": "popup.html"
+  },
+  "commands": {
+    "focus-previous-window": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+K",
+        "mac": "Command+Shift+K"
+      },
+      "description": "Focus previous Chrome window"
+    },
+    "focus-next-window": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+L",
+        "mac": "Command+Shift+L"
+      },
+      "description": "Focus next Chrome window"
+    },
+    "move-tabs-previous-window": {
+      "suggested_key": {
+        "default": "Alt+Shift+K",
+        "mac": "Alt+Shift+K"
+      },
+      "description": "Move selected tabs to previous window"
+    },
+    "move-tabs-next-window": {
+      "suggested_key": {
+        "default": "Alt+Shift+L",
+        "mac": "Alt+Shift+L"
+      },
+      "description": "Move selected tabs to next window"
+    }
+  }
+}
