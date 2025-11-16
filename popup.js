@@ -205,7 +205,6 @@ function createListItem(win, isActive, overrides) {
   editIcon.className = 'window-edit-icon';
   editIcon.title = 'Rename this window';
   editIcon.textContent = '✎';
-  editIcon.style.marginTop = '-3px'; // because ✎ points downward
 
   editIcon.addEventListener('mousedown', (e) => e.stopPropagation());
   editIcon.addEventListener('click', (e) => {
@@ -244,6 +243,41 @@ function createListItem(win, isActive, overrides) {
   const tabCount = win.tabs ? win.tabs.length : 0;
   tabsCountSpan.textContent = `(${tabCount} tab${tabCount === 1 ? '' : 's'})`;
 
+  //
+  // FOCUS ICON (right)
+  //
+  const focusIcon = document.createElement('span');
+  focusIcon.className = 'window-focus-icon';
+  focusIcon.title = 'Switch to this window';
+  // const svgUrl = chrome.runtime.getURL('go-to-window.svg');
+  focusIcon.innerHTML = `<svg width="11px" height="11px" viewBox="0 0 391 394" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <g id="Page-1" stroke="none" stroke-width="1" fill-rule="evenodd">
+        <path d="M275.869666,292.236778 C275.869666,281.731442 284.413674,273.202783 294.937917,273.202783 C305.455992,273.202783 314,281.731442 314,292.236778 L314,346.315247 C314,359.29605 308.676189,371.125331 300.113674,379.678621 C291.551159,388.225753 279.700589,393.54 266.690255,393.54 L47.3097446,393.54 C34.2994106,393.54 22.4488409,388.225753 13.8863261,379.678621 C5.32381139,371.125331 0,359.29605 0,346.315247 L0,125.764753 C0,112.777792 5.32381139,100.948512 13.8863261,92.4013794 C22.4488409,83.8542472 34.2994106,78.54 47.3097446,78.54 L100.967348,78.54 C111.491591,78.54 120.02943,87.0686586 120.02943,97.5678375 C120.02943,108.073174 111.491591,116.601833 100.967348,116.601833 L47.3097446,116.601833 C44.7989784,116.601833 42.4856189,117.642514 40.826169,119.292825 C39.172888,120.949294 38.130334,123.258497 38.130334,125.764753 L38.130334,346.315247 C38.130334,348.815345 39.172888,351.130706 40.826169,352.781017 C42.4856189,354.431328 44.7989784,355.478167 47.3097446,355.478167 L266.690255,355.478167 C269.201022,355.478167 271.514381,354.431328 273.173831,352.781017 C274.827112,351.130706 275.869666,348.815345 275.869666,346.315247 L275.869666,292.236778 Z M329.19,103.47 L190.15,244.28 C178.24,256.4 158.7,256.56 146.59,244.65 C134.48,232.74 134.31,213.2 146.22,201.09 L283.77,61.81 L191.7,61.81 C174.64,61.81 160.8,47.96 160.8,30.9 C160.8,13.85 174.64,0 191.7,0 L360.1,0 C377.15,0 391,13.85 391,30.9 L391,195.94 C391,213 377.15,226.84 360.1,226.84 C343.04,226.84 329.19,213 329.19,195.94 L329.19,103.47 Z" id="Shape"></path>
+    </g>
+</svg>`;
+  focusIcon.style.cursor = 'pointer';
+  // Place icon immediately after the visible title, before the tab count.
+  focusIcon.style.order = '2';
+  focusIcon.style.marginLeft = '6px';
+
+  // Keep title first; prevent it from growing so the icon sits right after it.
+  titleSpan.style.order = '0';
+  titleSpan.style.flex = '0 1 auto';
+  titleSpan.style.whiteSpace = 'nowrap';
+  titleSpan.style.overflow = 'hidden';
+  titleSpan.style.textOverflow = 'ellipsis';
+  titleSpan.style.minWidth = '0';
+
+  // Push the tab count to the far right so the focus icon stays next to the title.
+  tabsCountSpan.style.order = '1';
+  tabsCountSpan.style.marginLeft = 'auto';
+
+  focusIcon.addEventListener('mousedown', (e) => e.stopPropagation());
+  focusIcon.addEventListener('click', (e) => {
+    e.stopPropagation();
+    chrome.windows.update(win.id, { focused: true });
+  });
+
   let activeIndicator = null;
   if (isActive) {
     activeIndicator = document.createElement('span');
@@ -255,6 +289,7 @@ function createListItem(win, isActive, overrides) {
   titleRow.appendChild(titleSpan);
   if (activeIndicator) titleRow.appendChild(activeIndicator);
   titleRow.appendChild(tabsCountSpan);
+  titleRow.appendChild(focusIcon);
 
   //
   // SUBTITLE

@@ -121,71 +121,110 @@ function moveTabs(tabIds, targetWindowId, index) {
   });
 }
 
-async function moveSelectedTabsByOffset(offset) {
-  const [order, currentWin] = await Promise.all([getEffectiveOrder(), getCurrentWindow()]);
+let moveInProgress = false;
 
-  if (!currentWin || !currentWin.id) return;
-  if (order.length < 2) return; // nowhere to move
-
-  const currentWinId = currentWin.id;
-  let idx = order.indexOf(currentWinId);
-  if (idx === -1) {
-    const newOrder = await getEffectiveOrder();
-    idx = newOrder.indexOf(currentWinId);
-    if (idx === -1 || newOrder.length < 2) return;
-  }
-
-  const targetIdx = (idx + offset + order.length) % order.length;
-  const targetWinId = order[targetIdx];
-
-  if (targetWinId === currentWinId) return;
-
-  // Get selected tabs; if none, fall back to active tab
-  let selectedTabs = await getSelectedTabs(currentWinId);
-  if (!selectedTabs || selectedTabs.length === 0) {
-    const activeTab = await getActiveTab(currentWinId);
-    if (activeTab) {
-      selectedTabs = [activeTab];
-    } else {
-      return;
-    }
-  }
-
-  // Sort by index to preserve left-to-right order
-  selectedTabs.sort((a, b) => a.index - b.index);
-  const tabIds = selectedTabs.map((t) => t.id);
-
-  // Remember which selected tab was active
-  const activeSelected = selectedTabs.find((t) => t.active) || selectedTabs[0];
-  const activeSelectedTabId = activeSelected.id;
-
-  // Insert at end of target window
-  const targetTabsBefore = await getTabsInWindow(targetWinId);
-  const insertIndex = targetTabsBefore.length;
-
-  try {
-    await moveTabs(tabIds, targetWinId, insertIndex);
-  } catch (e) {
-    console.error('Error moving tabs:', e);
-    return;
-  }
-
-  // Re-query target window to recover the new indices of moved tabs
-  const targetTabsAfter = await getTabsInWindow(targetWinId);
-  const tabIdSet = new Set(tabIds);
-  const newIndices = targetTabsAfter
-    .filter((t) => tabIdSet.has(t.id))
-    .map((t) => t.index)
-    .sort((a, b) => a - b);
-
-  if (newIndices.length === 0) return;
-
-  // Focus the target window, reselect the moved tabs, and restore active tab
-  chrome.windows.update(targetWinId, { focused: true }, () => {
-    chrome.tabs.highlight({ windowId: targetWinId, tabs: newIndices }, () => {
-      chrome.tabs.update(activeSelectedTabId, { active: true });
+function focusWindow(windowId) {
+  return new Promise((resolve) => {
+    chrome.windows.update(windowId, { focused: true }, () => {
+      // ignore lastError here; just resolve
+      resolve();
     });
   });
+}
+
+function highlightTabs(windowId, indices) {
+  return new Promise((resolve) => {
+    if (!indices || indices.length === 0) {
+      resolve();
+      return;
+    }
+
+    chrome.tabs.highlight({ windowId, tabs: indices }, () => {
+      if (chrome.runtime.lastError) {
+        console.warn('highlight error:', chrome.runtime.lastError);
+      }
+      resolve();
+    });
+  });
+}
+
+async function moveSelectedTabsByOffset(offset) {
+  if (moveInProgress) return;
+  moveInProgress = true;
+
+  try {
+    const currentWin = await getCurrentWindow();
+    if (!currentWin || !currentWin.id) return;
+
+    // Get the current effective order
+    let order = await getEffectiveOrder();
+    if (!order || order.length < 2) return;
+
+    const currentWinId = currentWin.id;
+    let idx = order.indexOf(currentWinId);
+
+    if (idx === -1) {
+      // Rebuild once if the current window isn't in the order
+      order = await getEffectiveOrder();
+      idx = order.indexOf(currentWinId);
+      if (idx === -1 || order.length < 2) return;
+    }
+
+    const targetIdx = (idx + offset + order.length) % order.length;
+    const targetWinId = order[targetIdx];
+    if (targetWinId === currentWinId) return;
+
+    // Get selected tabs; if none, fall back to active tab
+    let selectedTabs = await getSelectedTabs(currentWinId);
+    if (!selectedTabs || selectedTabs.length === 0) {
+      const activeTab = await getActiveTab(currentWinId);
+      if (activeTab) {
+        selectedTabs = [activeTab];
+      } else {
+        return;
+      }
+    }
+
+    // Sort by index to preserve left-to-right order
+    selectedTabs.sort((a, b) => a.index - b.index);
+    const tabIds = selectedTabs.map((t) => t.id);
+
+    // Remember which selected tab was active
+    const activeSelected = selectedTabs.find((t) => t.active) || selectedTabs[0];
+    const activeSelectedTabId = activeSelected.id;
+
+    // Insert at end of target window
+    const targetTabsBefore = await getTabsInWindow(targetWinId);
+    const insertIndex = targetTabsBefore.length;
+
+    let movedTabs;
+    try {
+      movedTabs = await moveTabs(tabIds, targetWinId, insertIndex);
+    } catch (e) {
+      console.error('Error moving tabs:', e);
+      return;
+    }
+
+    const movedArray = Array.isArray(movedTabs) ? movedTabs : [movedTabs];
+    const movedIdsSet = new Set(tabIds);
+    const finalMoved = movedArray.filter((t) => movedIdsSet.has(t.id));
+
+    if (finalMoved.length === 0) return;
+
+    const newIndices = finalMoved.map((t) => t.index).sort((a, b) => a - b);
+
+    // Focus target window first
+    await focusWindow(targetWinId);
+
+    // Small delay to let Chrome settle its internal state (helps with races)
+    await new Promise((r) => setTimeout(r, 30));
+
+    // Highlight all moved tabs, then restore active tab
+    await highlightTabs(targetWinId, newIndices);
+    chrome.tabs.update(activeSelectedTabId, { active: true });
+  } finally {
+    moveInProgress = false;
+  }
 }
 
 // ---------- Window order maintenance ----------

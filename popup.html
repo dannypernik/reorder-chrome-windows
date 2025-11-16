@@ -70,10 +70,13 @@
         display: flex;
         align-items: flex-start;
         gap: 8px;
-        border-bottom: 1px solid #eee;
-        background: #fafafa;
+        border-bottom: 1px solid #27272a;
+        background: #18181b;
         transition: background 0.15s ease, transform 0.1s ease;
-        min-height: 22px; /* ensures enough height for two lines */
+        min-height: 24px;
+
+        /* reserve space for the active border so text doesn't shift */
+        border-left: 3px solid transparent;
       }
 
       .window-item:last-child {
@@ -96,7 +99,7 @@
 
       .window-item.active-window {
         background: #edf3ff;              /* subtle blue-tinted bg */
-        border-left: 3px solid #16a34a;   /* light green to match circle */
+        border-left-color: #16a34a;   /* light green to match circle */
       }
 
       .window-main {
@@ -150,23 +153,61 @@
       }
 
       .window-edit-icon {
-        font-size: 14px;
-        opacity: 0;              /* hidden until hover */
+        position: relative;
+        font-size: 15px;
         cursor: pointer;
+        opacity: 0;
         flex-shrink: 0;
-        margin-right: 6px;
-
-        /* the magic line: lift it slightly because ✎ points downward */
-        margin-top: -1px;        /* or -2px if you prefer */
-
+        margin-top: -2px;
+        line-height: 1;
         transition: opacity 0.12s ease;
       }
 
-      .window-item:hover .window-edit-icon {
-        opacity: 0.85;
+      /* invisible hitbox */
+      .window-edit-icon::after {
+        content: "";
+        position: absolute;
+        left: -4px;
+        right: -4px;
+        top: -4px;
+        bottom: -10px;      /* ← adds extra clickable space *below* the icon */
+        cursor: pointer;
       }
 
-      .window-edit-icon:hover {
+      .window-item:hover .window-edit-icon {
+        opacity: 0.75;
+      }
+
+      .window-item:hover .window-edit-icon:hover {
+        opacity: 1;
+      }
+
+      .window-focus-icon {
+        position: relative;
+        font-size: 15px;
+        cursor: pointer;
+        opacity: 0.75;
+        flex-shrink: 0;
+        line-height: 1;
+        transition: opacity 0.12s ease;
+
+        svg {
+          fill: #1976d2;
+        }
+      }
+
+      /* invisible hitbox */
+      .window-focus-icon::after {
+        content: "";
+        position: absolute;
+        left: -4px;
+        right: -4px;
+        top: -4px;
+        bottom: -10px;    /* ← bigger bottom hitbox */
+        cursor: pointer;
+      }
+
+      .window-item:hover .window-focus-icon:hover {
         opacity: 1;
       }
 
@@ -262,7 +303,7 @@
 
         .window-item.active-window {
           background: #111827;
-          border-left: 3px solid #22c55e;
+          border-left-color: #22c55e;
         }
 
         .window-tabs-count {
