@@ -456,4 +456,14 @@ async function saveOrderFromDom(showMessage = false) {
 
 document.addEventListener('DOMContentLoaded', () => {
   loadWindowsIntoList();
+
+  // Handle shortcuts link click
+  const shortcutsLink = document.getElementById('shortcuts-link');
+  
+  if (shortcutsLink) {
+    shortcutsLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      chrome.tabs.create({ url: 'chrome://extensions/shortcuts' });
+    });
+  }
 });

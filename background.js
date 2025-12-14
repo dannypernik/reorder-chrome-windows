@@ -258,3 +258,54 @@ chrome.commands.onCommand.addListener((command) => {
     moveSelectedTabsByOffset(-1);
   }
 });
+
+// ---------- Diagnostic / early-init IIFE ----------
+// Purpose: log when the service worker initializes and confirm command registration.
+(async function serviceWorkerInitDiagnostics() {
+  try {
+    console.log('[reorder] service worker init - starting diagnostics');
+
+    // Force an early load of stored order (touches chrome.storage and windows APIs)
+    try {
+      await getEffectiveOrder();
+      console.log('[reorder] getEffectiveOrder() completed');
+    } catch (e) {
+      console.warn('[reorder] getEffectiveOrder() failed', e);
+    }
+
+    // Log available commands to ensure Chrome has registered them
+    if (chrome.commands && chrome.commands.getAll) {
+      chrome.commands.getAll((cmds) => {
+        console.log('[reorder] chrome.commands.getAll ->', cmds);
+      });
+    } else {
+      console.warn('[reorder] chrome.commands API unavailable');
+    }
+
+    // Lightweight runtime call that tends to wake the worker early
+    if (chrome.runtime && chrome.runtime.getPlatformInfo) {
+      chrome.runtime.getPlatformInfo((info) => {
+        console.log('[reorder] platform info:', info && info.os);
+      });
+    }
+
+    console.log('[reorder] service worker init - diagnostics complete');
+  } catch (err) {
+    console.error('[reorder] service worker init diagnostics error', err);
+  }
+})();
+
+// ---------- Service worker initialization ----------
+// Ensure the service worker wakes up and registers listeners on install/update
+chrome.runtime.onInstalled.addListener(async () => {
+  console.log('Extension installed/updated - listeners registered');
+  // Initialize the order to ensure storage is ready
+  await getEffectiveOrder();
+});
+
+// Wake up on browser startup to ensure listeners are active
+chrome.runtime.onStartup.addListener(async () => {
+  console.log('Browser started - listeners registered');
+  // Initialize the order to ensure everything is ready
+  await getEffectiveOrder();
+});
