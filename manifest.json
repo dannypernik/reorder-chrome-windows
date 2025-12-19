@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Reorder Chrome Windows",
-  "version": "1.03",
+  "version": "1.4",
   "description": "Switch between Chrome windows or move tabs in a custom window order.",
   "permissions": ["windows", "storage", "tabs"],
   "background": {
@@ -26,15 +26,15 @@
   "commands": {
     "focus-previous-window": {
       "suggested_key": {
-        "default": "Ctrl+Comma",
-        "mac": "Command+Comma"
+        "default": "Ctrl+Shift+K",
+        "mac": "Command+Shift+K"
       },
       "description": "Focus previous Chrome window"
     },
     "focus-next-window": {
       "suggested_key": {
-        "default": "Ctrl+Period",
-        "mac": "Command+Period"
+        "default": "Ctrl+Shift+L",
+        "mac": "Command+Shift+L"
       },
       "description": "Focus next Chrome window"
     },
