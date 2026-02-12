@@ -1,6 +1,25 @@
 // background.js
 
 const ORDER_KEY = 'windowOrder';
+// ---------- Throttling / pacing (Pause for OS desktop switching) ----------
+
+const MIN_ACTION_INTERVAL_MS = 250;   // spacing between queued operations
+const POST_FOCUS_SETTLE_MS = 200;     // extra time after focus confirmed
+let lastActionAt = 0;
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+// Ensures we don't run actions faster than macOS Spaces can visually keep up.
+async function paceActions(minIntervalMs = MIN_ACTION_INTERVAL_MS) {
+  const now = Date.now();
+  const elapsed = now - lastActionAt;
+  if (elapsed < minIntervalMs) {
+    await sleep(minIntervalMs - elapsed);
+  }
+  lastActionAt = Date.now();
+}
 
 // ---------- Helper functions ----------
 
@@ -62,6 +81,7 @@ function getCurrentWindow() {
 // ---------- Focus-cycling logic ----------
 
 async function focusWindowByOffset(offset) {
+  await paceActions();
   const [order, currentWin] = await Promise.all([getEffectiveOrder(), getCurrentWindow()]);
 
   if (!currentWin || !currentWin.id) return;
@@ -160,6 +180,8 @@ async function moveSelectedTabsByOffset(offset) {
   moveInProgress = true;
 
   try {
+    await paceActions();
+
     const currentWin = await getCurrentWindow();
     if (!currentWin || !currentWin.id) return;
 
@@ -236,6 +258,9 @@ async function moveSelectedTabsByOffset(offset) {
       waited += pollInterval;
     }
 
+    // Give macOS Spaces a beat to catch up visually
+    await sleep(POST_FOCUS_SETTLE_MS);
+
     // Highlight all moved tabs, then restore active tab
     await highlightTabs(targetWinId, newIndices);
     await chrome.tabs.update(activeSelectedTabId, { active: true });
@@ -246,6 +271,7 @@ async function moveSelectedTabsByOffset(offset) {
     moveInProgress = false;
     if (moveQueue.length > 0) {
       const nextOffset = moveQueue.shift();
+      await paceActions();
       moveSelectedTabsByOffset(nextOffset);
     }
   }
