@@ -55,7 +55,7 @@ async function getEffectiveOrder() {
 
 function getCurrentWindow() {
   return new Promise((resolve) => {
-    chrome.windows.getCurrent(resolve);
+    chrome.windows.getLastFocused({ populate: false }, resolve);
   });
 }
 
@@ -121,7 +121,9 @@ function moveTabs(tabIds, targetWindowId, index) {
   });
 }
 
+
 let moveInProgress = false;
+let moveQueue = [];
 
 function focusWindow(windowId) {
   return new Promise((resolve) => {
@@ -149,7 +151,12 @@ function highlightTabs(windowId, indices) {
 }
 
 async function moveSelectedTabsByOffset(offset) {
-  if (moveInProgress) return;
+
+  if (moveInProgress) {
+    // Queue the request
+    moveQueue.push(offset);
+    return;
+  }
   moveInProgress = true;
 
   try {
@@ -216,14 +223,31 @@ async function moveSelectedTabsByOffset(offset) {
     // Focus target window first
     await focusWindow(targetWinId);
 
-    // Small delay to let Chrome settle its internal state (helps with races)
-    await new Promise((r) => setTimeout(r, 30));
+    // Wait until the target window is actually focused (polling)
+    const maxWait = 1000; // ms
+    const pollInterval = 30; // ms
+    let waited = 0;
+    while (waited < maxWait) {
+      const lastFocused = await new Promise((resolve) => {
+        chrome.windows.getLastFocused({ populate: false }, resolve);
+      });
+      if (lastFocused && lastFocused.id === targetWinId) break;
+      await new Promise((r) => setTimeout(r, pollInterval));
+      waited += pollInterval;
+    }
 
     // Highlight all moved tabs, then restore active tab
     await highlightTabs(targetWinId, newIndices);
-    chrome.tabs.update(activeSelectedTabId, { active: true });
+    await chrome.tabs.update(activeSelectedTabId, { active: true });
+    // Re-highlight all moved tabs after setting active tab to ensure selection is preserved
+    await new Promise((r) => setTimeout(r, 30));
+    await highlightTabs(targetWinId, newIndices);
   } finally {
     moveInProgress = false;
+    if (moveQueue.length > 0) {
+      const nextOffset = moveQueue.shift();
+      moveSelectedTabsByOffset(nextOffset);
+    }
   }
 }
 
