@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Reorder Chrome Windows",
-  "version": "1.6",
+  "version": "1.7",
   "description": "Switch between Chrome windows or move tabs in a custom window order.",
   "permissions": ["windows", "storage", "tabs"],
   "background": {

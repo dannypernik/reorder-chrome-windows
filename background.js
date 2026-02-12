@@ -261,12 +261,18 @@ async function moveSelectedTabsByOffset(offset) {
     // Give macOS Spaces a beat to catch up visually
     await sleep(POST_FOCUS_SETTLE_MS);
 
-    // Highlight all moved tabs, then restore active tab
-    await highlightTabs(targetWinId, newIndices);
-    await chrome.tabs.update(activeSelectedTabId, { active: true });
-    // Re-highlight all moved tabs after setting active tab to ensure selection is preserved
+    // Make the intended moved tab active AND highlight all moved tabs in one step
+    const activeMoved = finalMoved.find((t) => t.id === activeSelectedTabId);
+    const activeIndex = activeMoved ? activeMoved.index : newIndices[0];
+
+    // Put activeIndex first so tabs.highlight activates it
+    const ordered = [activeIndex, ...newIndices.filter((i) => i !== activeIndex)];
+
+    await highlightTabs(targetWinId, ordered);
+
+    // Optional: macOS/Chrome sometimes drops multi-select briefly; re-assert once
     await new Promise((r) => setTimeout(r, 30));
-    await highlightTabs(targetWinId, newIndices);
+    await highlightTabs(targetWinId, ordered);
   } finally {
     moveInProgress = false;
     if (moveQueue.length > 0) {
