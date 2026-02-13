@@ -51,6 +51,12 @@
         "mac": "Command+Shift+Period"
       },
       "description": "Move selected tabs to next window"
+    },
+      "multi-select-tab-left": {
+      "description": "Multi-select tab left"
+    },
+    "multi-select-tab-right": {
+      "description": "Multi-select tab right"
     }
   }
 }

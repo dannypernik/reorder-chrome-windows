@@ -6,6 +6,8 @@ const ORDER_KEY = 'windowOrder';
 const MIN_ACTION_INTERVAL_MS = 250;   // spacing between queued operations
 const POST_FOCUS_SETTLE_MS = 200;     // extra time after focus confirmed
 let lastActionAt = 0;
+const rangeAnchorByWindow = new Map(); // windowId -> anchorIndex
+let rangeSelectInProgress = false;
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -170,6 +172,7 @@ function highlightTabs(windowId, indices) {
   });
 }
 
+
 async function moveSelectedTabsByOffset(offset) {
 
   if (moveInProgress) {
@@ -283,6 +286,58 @@ async function moveSelectedTabsByOffset(offset) {
   }
 }
 
+// ---------- Multi-select stepping (left/right) ----------
+
+async function multiSelectTabs(direction /* -1 or +1 */) {
+  const currentWin = await getCurrentWindow();
+  if (!currentWin || !currentWin.id) return;
+
+  const windowId = currentWin.id;
+
+  const activeTab = await getActiveTab(windowId);
+  if (!activeTab) return;
+
+  const allTabs = await getTabsInWindow(windowId);
+  if (!allTabs || allTabs.length === 0) return;
+
+  const caretIndex = activeTab.index;
+  const nextIndex = caretIndex + direction;
+
+  // Clamp (no wrap)
+  if (nextIndex < 0 || nextIndex >= allTabs.length) return;
+
+  // Initialize anchor once per "selection session"
+  let anchor = rangeAnchorByWindow.get(windowId);
+  if (!Number.isInteger(anchor) || anchor < 0 || anchor >= allTabs.length) {
+    anchor = caretIndex;
+    rangeAnchorByWindow.set(windowId, anchor);
+  }
+
+  // Build contiguous range [min(anchor, nextIndex) .. max(anchor, nextIndex)]
+  const lo = Math.min(anchor, nextIndex);
+  const hi = Math.max(anchor, nextIndex);
+
+  const range = [];
+  for (let i = lo; i <= hi; i++) range.push(i);
+
+  // Put nextIndex first so tabs.highlight activates it
+  const ordered = [nextIndex, ...range.filter((i) => i !== nextIndex)];
+
+  // IMPORTANT: set flag BEFORE highlight (highlight triggers onActivated)
+  rangeSelectInProgress = true;
+  try {
+    await highlightTabs(windowId, ordered);
+
+    // Optional re-assert
+    await new Promise((r) => setTimeout(r, 30));
+    await highlightTabs(windowId, ordered);
+  } finally {
+    // Give the onActivated event time to fire before clearing the flag
+    setTimeout(() => { rangeSelectInProgress = false; }, 100);
+  }
+}
+
+
 // ---------- Window order maintenance ----------
 
 chrome.windows.onCreated.addListener(async (win) => {
@@ -312,6 +367,10 @@ chrome.commands.onCommand.addListener((command) => {
     moveSelectedTabsByOffset(1);
   } else if (command === 'move-tabs-previous-window') {
     moveSelectedTabsByOffset(-1);
+  } else if (command === 'multi-select-tab-left') {
+    multiSelectTabs(-1);
+  } else if (command === 'multi-select-tab-right') {
+    multiSelectTabs(1);
   }
 });
 
@@ -364,4 +423,10 @@ chrome.runtime.onStartup.addListener(async () => {
   console.log('Browser started - listeners registered');
   // Initialize the order to ensure everything is ready
   await getEffectiveOrder();
+});
+
+// ---------- Reset range anchor on tab/window activation ----------
+chrome.tabs.onActivated.addListener(({ windowId }) => {
+  if (rangeSelectInProgress) return; // activation caused by our shortcut
+  rangeAnchorByWindow.delete(windowId); // user clicked / other activation => reset anchor
 });
