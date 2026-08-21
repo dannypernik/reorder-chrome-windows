@@ -240,6 +240,26 @@
         }
       }
 
+      .setting-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11px;
+        color: #555;
+        margin-bottom: 8px;
+        cursor: pointer;
+      }
+
+      .setting-row input {
+        margin: 0;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        .setting-row {
+          color: #9ca3af;
+        }
+      }
+
       .buttons {
         display: flex;
         justify-content: space-between;
@@ -361,6 +381,11 @@
       Drag windows to reorder. Shortcuts cycle focus and move tabs using this order.
       <a href="#" id="shortcuts-link">Keyboard shortcuts</a>
     </p>
+    <label class="setting-row">
+      <input type="checkbox" id="skip-minimized-checkbox" />
+      Skip minimized windows with keyboard shortcuts
+    </label>
+
     <div id="status"></div>
 
     <ul id="window-list"></ul>

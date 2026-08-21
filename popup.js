@@ -1,5 +1,6 @@
 const ORDER_KEY = 'windowOrder';
 const TITLE_OVERRIDES_KEY = 'windowTitleOverrides';
+const SKIP_MINIMIZED_KEY = 'skipMinimizedWindows';
 
 let draggedItem = null;
 
@@ -24,6 +25,22 @@ function setStoredOrder(order) {
   return new Promise((resolve) => {
     const obj = {};
     obj[ORDER_KEY] = order;
+    chrome.storage.local.set(obj, resolve);
+  });
+}
+
+function getSkipMinimized() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get(SKIP_MINIMIZED_KEY, (data) => {
+      resolve(!!data[SKIP_MINIMIZED_KEY]);
+    });
+  });
+}
+
+function setSkipMinimized(value) {
+  return new Promise((resolve) => {
+    const obj = {};
+    obj[SKIP_MINIMIZED_KEY] = value;
     chrome.storage.local.set(obj, resolve);
   });
 }
@@ -459,11 +476,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Handle shortcuts link click
   const shortcutsLink = document.getElementById('shortcuts-link');
-  
+
   if (shortcutsLink) {
     shortcutsLink.addEventListener('click', (e) => {
       e.preventDefault();
       chrome.tabs.create({ url: 'chrome://extensions/shortcuts' });
+    });
+  }
+
+  // Skip-minimized-windows setting
+  const skipMinimizedCheckbox = document.getElementById('skip-minimized-checkbox');
+  if (skipMinimizedCheckbox) {
+    getSkipMinimized().then((value) => {
+      skipMinimizedCheckbox.checked = value;
+    });
+
+    skipMinimizedCheckbox.addEventListener('change', () => {
+      setSkipMinimized(skipMinimizedCheckbox.checked);
     });
   }
 });

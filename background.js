@@ -1,6 +1,7 @@
 // background.js
 
 const ORDER_KEY = 'windowOrder';
+const SKIP_MINIMIZED_KEY = 'skipMinimizedWindows';
 // ---------- Throttling / pacing (Pause for OS desktop switching) ----------
 
 const MIN_ACTION_INTERVAL_MS = 250;   // spacing between queued operations
@@ -47,6 +48,27 @@ function setStoredOrder(order) {
   });
 }
 
+function getSkipMinimized() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get(SKIP_MINIMIZED_KEY, (data) => {
+      resolve(!!data[SKIP_MINIMIZED_KEY]);
+    });
+  });
+}
+
+// Returns the effective order, optionally excluding minimized windows.
+// Falls back to the unfiltered order if filtering would leave nothing.
+async function getNavigableOrder(skipMinimized) {
+  const fullOrder = await getEffectiveOrder();
+  if (!skipMinimized || fullOrder.length === 0) return fullOrder;
+
+  const windows = await getAllNormalWindows();
+  const minimizedIds = new Set(windows.filter((w) => w.state === 'minimized').map((w) => w.id));
+  const filtered = fullOrder.filter((id) => !minimizedIds.has(id));
+
+  return filtered.length > 0 ? filtered : fullOrder;
+}
+
 // Ensure our order is valid & synced with current windows
 async function getEffectiveOrder() {
   const [windows, storedOrder] = await Promise.all([getAllNormalWindows(), getStoredOrder()]);
@@ -84,20 +106,21 @@ function getCurrentWindow() {
 
 async function focusWindowByOffset(offset) {
   await paceActions();
-  const [order, currentWin] = await Promise.all([getEffectiveOrder(), getCurrentWindow()]);
+  const [skipMinimized, currentWin] = await Promise.all([getSkipMinimized(), getCurrentWindow()]);
 
   if (!currentWin || !currentWin.id) return;
+
+  let order = await getNavigableOrder(skipMinimized);
   if (order.length === 0) return;
 
   let idx = order.indexOf(currentWin.id);
   if (idx === -1) {
-    // Not in order yet; rebuild & retry once
-    const newOrder = await getEffectiveOrder();
-    idx = newOrder.indexOf(currentWin.id);
-    if (idx === -1 || newOrder.length === 0) return;
-    const nextIdx = (idx + offset + newOrder.length) % newOrder.length;
-    await chrome.windows.update(newOrder[nextIdx], { focused: true });
-    return;
+    // Current window not in the navigable order (e.g. it's newly created, or it
+    // was excluded by minimized-filtering); fall back to the full order so we
+    // can still locate it and step from there.
+    order = await getEffectiveOrder();
+    idx = order.indexOf(currentWin.id);
+    if (idx === -1 || order.length === 0) return;
   }
 
   const nextIdx = (idx + offset + order.length) % order.length;
@@ -185,18 +208,18 @@ async function moveSelectedTabsByOffset(offset) {
   try {
     await paceActions();
 
-    const currentWin = await getCurrentWindow();
+    const [currentWin, skipMinimized] = await Promise.all([getCurrentWindow(), getSkipMinimized()]);
     if (!currentWin || !currentWin.id) return;
 
-    // Get the current effective order
-    let order = await getEffectiveOrder();
+    // Get the navigable order (optionally excluding minimized windows as move targets)
+    let order = await getNavigableOrder(skipMinimized);
     if (!order || order.length < 2) return;
 
     const currentWinId = currentWin.id;
     let idx = order.indexOf(currentWinId);
 
     if (idx === -1) {
-      // Rebuild once if the current window isn't in the order
+      // Current window isn't in the navigable order; fall back to the full order
       order = await getEffectiveOrder();
       idx = order.indexOf(currentWinId);
       if (idx === -1 || order.length < 2) return;
