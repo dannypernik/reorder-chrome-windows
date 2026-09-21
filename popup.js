@@ -3,6 +3,7 @@ const TITLE_OVERRIDES_KEY = 'windowTitleOverrides';
 const SKIP_MINIMIZED_KEY = 'skipMinimizedWindows';
 
 let draggedItem = null;
+let draggedStartIndex = -1;
 
 function showStatus(message, type = 'ok') {
   const statusEl = document.getElementById('status');
@@ -336,9 +337,6 @@ function createListItem(win, isActive, overrides) {
   // Drag events on entire row
   //
   li.addEventListener('dragstart', handleDragStart);
-  li.addEventListener('dragover', handleDragOver);
-  li.addEventListener('dragleave', handleDragLeave);
-  li.addEventListener('drop', handleDrop);
   li.addEventListener('dragend', handleDragEnd);
 
   return li;
@@ -346,6 +344,8 @@ function createListItem(win, isActive, overrides) {
 
 function handleDragStart(e) {
   draggedItem = this;
+  const list = document.getElementById('window-list');
+  draggedStartIndex = Array.from(list.children).indexOf(this);
   this.classList.add('dragging');
   if (e.dataTransfer) {
     e.dataTransfer.effectAllowed = 'move';
@@ -353,43 +353,90 @@ function handleDragStart(e) {
   }
 }
 
-function handleDragOver(e) {
-  e.preventDefault(); // necessary to allow a drop
-  this.classList.add('over');
-  if (e.dataTransfer) {
-    e.dataTransfer.dropEffect = 'move';
+// Determines the insertion gap (0..items.length) the pointer is currently over,
+// indexed against the full list (including the dragged item, which stays in
+// place in the DOM until drop). Gap i means "insert before the item currently
+// at index i"; gap === items.length means "insert at the end of the list".
+function computeDropGap(e) {
+  const list = document.getElementById('window-list');
+  const items = Array.from(list.children);
+  const y = e.clientY;
+
+  for (let i = 0; i < items.length; i++) {
+    const rect = items[i].getBoundingClientRect();
+    const mid = rect.top + rect.height / 2;
+    if (y < mid) return i;
+  }
+  return items.length;
+}
+
+function clearDropIndicator() {
+  document.querySelectorAll('#window-list .drop-line-above').forEach((el) => el.classList.remove('drop-line-above'));
+  document.querySelectorAll('#window-list .drop-line-below').forEach((el) => el.classList.remove('drop-line-below'));
+}
+
+// A gap is a no-op when it sits on either side of the dragged item's current
+// position: dropping there wouldn't change the order, so no line is shown.
+function isNoOpGap(gap) {
+  return gap === draggedStartIndex || gap === draggedStartIndex + 1;
+}
+
+function showDropIndicator(gap) {
+  clearDropIndicator();
+
+  if (isNoOpGap(gap)) return;
+
+  const list = document.getElementById('window-list');
+  const items = Array.from(list.children);
+
+  if (gap < items.length) {
+    items[gap].classList.add('drop-line-above');
+  } else {
+    const last = items[items.length - 1];
+    if (last) last.classList.add('drop-line-below');
   }
 }
 
-function handleDragLeave(_e) {
-  this.classList.remove('over');
+function handleListDragOver(e) {
+  if (!draggedItem) return;
+  e.preventDefault(); // necessary to allow a drop
+  if (e.dataTransfer) {
+    e.dataTransfer.dropEffect = 'move';
+  }
+  showDropIndicator(computeDropGap(e));
 }
 
-function handleDrop(e) {
+function handleListDragLeave(e) {
+  const list = document.getElementById('window-list');
+  if (e.relatedTarget && list.contains(e.relatedTarget)) return;
+  clearDropIndicator();
+}
+
+function handleListDrop(e) {
+  if (!draggedItem) return;
   e.preventDefault();
-  this.classList.remove('over');
 
-  const list = this.parentNode;
-  if (!draggedItem || draggedItem === this) return;
+  const gap = computeDropGap(e);
+  clearDropIndicator();
 
-  const children = Array.from(list.children);
-  const draggedIndex = children.indexOf(draggedItem);
-  const targetIndex = children.indexOf(this);
+  if (isNoOpGap(gap)) return;
 
-  if (draggedIndex < 0 || targetIndex < 0) return;
+  const list = document.getElementById('window-list');
+  const items = Array.from(list.children);
 
-  if (draggedIndex < targetIndex) {
-    list.insertBefore(draggedItem, this.nextSibling);
+  if (gap < items.length) {
+    list.insertBefore(draggedItem, items[gap]);
   } else {
-    list.insertBefore(draggedItem, this);
+    list.appendChild(draggedItem);
   }
 }
 
 async function handleDragEnd(_e) {
   this.classList.remove('dragging');
   draggedItem = null;
+  draggedStartIndex = -1;
 
-  document.querySelectorAll('#window-list .over').forEach((el) => el.classList.remove('over'));
+  clearDropIndicator();
 
   // autosave new order based on current DOM
   await saveOrderFromDom(false);
@@ -473,6 +520,13 @@ async function saveOrderFromDom(showMessage = false) {
 
 document.addEventListener('DOMContentLoaded', () => {
   loadWindowsIntoList();
+
+  // Drag-and-drop reordering is handled at the list-container level so a
+  // single drop line can be shown between items (and at the end of the list).
+  const list = document.getElementById('window-list');
+  list.addEventListener('dragover', handleListDragOver);
+  list.addEventListener('dragleave', handleListDragLeave);
+  list.addEventListener('drop', handleListDrop);
 
   // Handle shortcuts link click
   const shortcutsLink = document.getElementById('shortcuts-link');
